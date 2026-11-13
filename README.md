@@ -1,5 +1,7 @@
 # Qwen Image Harness
 
+[![build](https://github.com/XCisCoX/qwen-image-harness/actions/workflows/build.yml/badge.svg)](https://github.com/XCisCoX/qwen-image-harness/actions/workflows/build.yml)
+
 A desktop frontend for **Qwen-Image-2.1** on a consumer GPU: generate, edit, face-swap
 and mask-infill, browse results, watch the engine's log. Qt/C++, no web stack, one binary.
 
@@ -32,6 +34,9 @@ the Qwen team; "Qwen" is their trademark and is used here only to say what the a
 
 * Linux with a CUDA GPU and a recent NVIDIA driver (validated: RTX 2060 SUPER 8 GB,
   Turing, driver 595, Ubuntu 24.04). 8 GB is the floor for the quantised stack.
+* Windows 10/11 x64 for the frontend: the release zip bundles Qt, so nothing has to
+  be installed. From source it needs Qt 5.12+ (MinGW 64-bit); see below. The ComfyUI
+  engine is a separate install on either OS.
 * Qt 5.15 (or Qt 6) + a C++11 compiler — `qtbase5-dev qttools5-dev-tools build-essential`.
 * Python 3.10+ with `python3-venv`.
 * ~18 GB disk without weights, ~40 GB with them.
@@ -51,6 +56,50 @@ qwen-image-harness
 Or hand the repository to an agent and point it at **AGENT.md** — it is written as a
 gated procedure (probe → install → verify) with the failure table this stack earned the
 hard way.
+
+### Windows
+
+Download `qwen-image-harness-<version>-windows-x64.zip` from Releases, extract it and run
+`QwenImageHarness.exe`. Qt and the compiler runtime are bundled, so there is no installer
+and nothing to configure.
+
+![the Windows build, fresh profile](docs/windows-preview.png)
+
+From source, with any Qt 5.12+ MinGW 64-bit kit installed under `C:\Qt` (5.15.2 is what
+CI uses):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\harness\build-windows.ps1
+# -> harness\dist\QwenImageHarness\QwenImageHarness.exe   (windeployqt output)
+```
+
+Pass `-Version 1.2.3` to stamp a version, `-ZipPath dist\out.zip` to produce the release
+archive, or `-QtDir C:\Qt\5.15.2\mingw81_64` to pick a kit explicitly.
+
+Only the frontend is built here. Install ComfyUI for Windows separately and point
+Settings → Server at its interpreter and folder — the defaults are
+`%USERPROFILE%\ComfyUI\venv\Scripts\python.exe` and `%USERPROFILE%\ComfyUI`, with
+arguments `main.py --listen 127.0.0.1 --port 8188 --reserve-vram 0.8 --fp16-unet`.
+`setup.sh`, `doctor.sh` and the model downloader remain Linux-only.
+
+### Versions and CI
+
+`.github/workflows/build.yml` builds both platforms on every push and pull request:
+
+* **Windows x64** — Qt 5.15.2 MinGW 64-bit, `windeployqt`, zipped (self-contained).
+* **Linux x86_64** — distro Qt 5.15 on Ubuntu 22.04, tarball with `harness/install.sh`.
+
+The same version is stamped into the binary (`--version`, window title, Settings → About)
+and into the artifact names:
+
+| Trigger | Version |
+|---|---|
+| tag `v1.2.3` | `1.2.3` — also publishes a GitHub release with both artifacts |
+| manual run with a `version` input | that value |
+| any other push / PR | `<base>-dev.<run>.<sha>` |
+
+Bump `<base>` in `harness/Src/QImageHarness.pro` when cutting a release, then tag
+`v<base>`. To check a local build: `QwenImageHarness.exe --version`.
 
 Headless smoke test:
 
@@ -89,6 +138,9 @@ Working, verified on the hardware above: generate (42 s), base 25-step (88 s), e
 multi-reference composition, RGBA output, mask infill with the invariants above. Known
 gaps: 2048² does not fit (VAE decode needs ~7 GB), Settings → Apply does not re-apply
 defaults to already-open pages, and batch results arrive as separate frames.
+
+The Qt frontend also builds and runs on Windows x64 (CI does it on every push); the
+engine steps and timings above describe the Linux + ComfyUI path.
 
 ## Licence
 

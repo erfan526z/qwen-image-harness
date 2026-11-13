@@ -1,5 +1,9 @@
 # build output
 harness/Build-Linux/
+harness/Build-Windows/
+harness/dist/
+harness/build-*/
+dist/
 *.o
 moc_*.cpp
 *.moc
@@ -11,3 +15,7 @@ __pycache__/
 out/
 *.ini
 *.log
+
+# Qt Creator / IDE user state
+*.pro.user
+*.pro.user.*

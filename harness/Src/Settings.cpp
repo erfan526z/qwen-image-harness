@@ -54,6 +54,24 @@ static QString appDataRoot()
     return p;
 }
 
+QString defaultComfyDir()
+{
+#ifdef Q_OS_WIN
+    return QDir::fromNativeSeparators(QDir::homePath() + "/ComfyUI");
+#else
+    return QDir::homePath() + "/git/ComfyUI";
+#endif
+}
+
+QString defaultComfyPython()
+{
+#ifdef Q_OS_WIN
+    return defaultComfyDir() + "/venv/Scripts/python.exe";
+#else
+    return defaultComfyDir() + "/venv/bin/python";
+#endif
+}
+
 QStringList AppSettings::accentChoices()
 {
     return QStringList() << "#8B7BFF" << "#5AA9FF" << "#42D6B0" << "#FF8A5B" << "#FF6FA5";
@@ -82,13 +100,11 @@ void AppSettings::load()
     m_data.retentionEnabled = m_qs.value("data/retentionEnabled", false).toBool();
     m_data.retentionDays = m_qs.value("data/retentionDays", 30).toInt();
 
-    m_server.command = m_qs.value("server/command",
-                                  QDir::homePath() + "/git/ComfyUI/venv/bin/python").toString();
+    m_server.command = m_qs.value("server/command", defaultComfyPython()).toString();
     m_server.arguments = m_qs.value("server/arguments",
                                     QString("main.py --listen 127.0.0.1 --port 8188 "
                                             "--reserve-vram 0.8 --fp16-unet")).toString();
-    m_server.workingDir = m_qs.value("server/workingDir",
-                                     QDir::homePath() + "/git/ComfyUI").toString();
+    m_server.workingDir = m_qs.value("server/workingDir", defaultComfyDir()).toString();
     m_server.port = m_qs.value("server/port", 8188).toInt();
     m_server.autoStart = m_qs.value("server/autoStart", false).toBool();
     m_server.stopOnExit = m_qs.value("server/stopOnExit", true).toBool();

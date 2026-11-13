@@ -9,6 +9,7 @@
 #include <QDebug>
 
 #include "BackendFactory.h"
+#include "AppVersion.h"
 #include "Icons.h"
 #include "Log.h"
 #include "MainWindow.h"
@@ -137,7 +138,7 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
     QCoreApplication::setOrganizationName("Qwen");
     QCoreApplication::setApplicationName("Qwen Image Harness");
-    QCoreApplication::setApplicationVersion("0.1.0");
+    QCoreApplication::setApplicationVersion(QString::fromLatin1(APP_VERSION));
 
     QCommandLineParser parser;
     parser.setApplicationDescription("Qwen-Image-2.1 desktop frontend");

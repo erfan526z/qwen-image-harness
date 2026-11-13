@@ -53,6 +53,48 @@ const char *kVae = "qwen_image_2.1_vae_bf16.safetensors";
 } // namespace
 namespace {
 
+// QProcess::splitCommand arrived in Qt 5.15. Keep the same behaviour on the
+// Qt 5.12/5.14 kits the Windows builds use: split on whitespace outside quotes,
+// honour single/double quotes and backslash escapes inside double quotes.
+QStringList splitCommandLine(const QString &command)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+    return QProcess::splitCommand(command);
+#else
+    QStringList out;
+    QString current;
+    bool inSingle = false;
+    bool inDouble = false;
+    bool hasToken = false;
+
+    for (int i = 0; i < command.size(); ++i) {
+        const QChar c = command.at(i);
+        if (c == '\\' && inDouble && i + 1 < command.size()) {
+            current += command.at(++i);
+            hasToken = true;
+        } else if (c == '"' && !inSingle) {
+            inDouble = !inDouble;
+            hasToken = true;
+        } else if (c == '\'' && !inDouble) {
+            inSingle = !inSingle;
+            hasToken = true;
+        } else if (c.isSpace() && !inSingle && !inDouble) {
+            if (hasToken) {
+                out << current;
+                current.clear();
+                hasToken = false;
+            }
+        } else {
+            current += c;
+            hasToken = true;
+        }
+    }
+    if (hasToken)
+        out << current;
+    return out;
+#endif
+}
+
 // Bounding box of everything above `threshold`, or a null rect for an empty mask.
 QRect maskBounds(const QImage &gray, int threshold = 127)
 {
@@ -194,16 +236,16 @@ void ComfyBackend::startServer()
     QStringList args;
 
     if (program.isEmpty()) {
-        program = QDir::homePath() + "/git/ComfyUI/venv/bin/python";
-        args = QProcess::splitCommand(QString("main.py --listen 127.0.0.1 --port %1 "
-                                             "--reserve-vram 0.8 --fp16-unet").arg(m_port));
+        program = defaultComfyPython();
+        args = splitCommandLine(QString("main.py --listen 127.0.0.1 --port %1 "
+                                        "--reserve-vram 0.8 --fp16-unet").arg(m_port));
     } else {
-        args = QProcess::splitCommand(opts.arguments);
+        args = splitCommandLine(opts.arguments);
     }
 
     QString workDir = opts.workingDir.trimmed();
     if (workDir.isEmpty())
-        workDir = QDir::homePath() + "/git/ComfyUI";
+        workDir = defaultComfyDir();
 
     if (!QFileInfo::exists(program)) {
         emitState(Failed);
@@ -308,7 +350,11 @@ void ComfyBackend::onProcessOutput()
 
     const QString text = QString::fromLocal8Bit(m_proc->readAll());
     static const QRegularExpression ansi("\\x1b\\[[0-9;]*[A-Za-z]");
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
     const QStringList lines = text.split(QRegularExpression("[\r\n]+"), Qt::SkipEmptyParts);
+#else
+    const QStringList lines = text.split(QRegularExpression("[\r\n]+"), QString::SkipEmptyParts);
+#endif
 
     static const QRegularExpression stepRe("(\\d+)/(\\d+)\\s*\\[");
     for (const QString &raw : lines) {

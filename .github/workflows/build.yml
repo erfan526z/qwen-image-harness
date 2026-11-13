@@ -1,0 +1,201 @@
+name: build
+
+# Builds the Qt frontend for Windows (MinGW, self-contained zip) and Linux
+# (system Qt 5, tarball). Tags vX.Y.Z publish a GitHub release.
+on:
+  push:
+    branches: [master, main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version stamp for this run (default: <base>-dev.<run>.<sha>)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  QT_VERSION: '5.15.2'
+
+jobs:
+  version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version from tag, input or run number
+        id: resolve
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          set -euo pipefail
+          base=$(sed -n 's/^[[:space:]]*APP_VERSION = \([0-9][^[:space:]]*\).*/\1/p' harness/Src/QImageHarness.pro | head -n1)
+          base=${base:-0.1.0}
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          elif [[ -n "${INPUT_VERSION:-}" ]]; then
+            version="$INPUT_VERSION"
+          else
+            version="${base}-dev.${GITHUB_RUN_NUMBER}.${GITHUB_SHA::7}"
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?([.-][0-9A-Za-z.+-]+)?$ ]]; then
+            echo "::error::'$version' is not a valid version (expected X.Y[.Z] or X.Y.Z-suffix)"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Building version: $version"
+
+  windows:
+    name: Windows x64
+    needs: version
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt ${{ env.QT_VERSION }} (MinGW 8.1 64-bit)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: windows
+          target: desktop
+          arch: win64_mingw81
+          tools: 'tools_mingw,qt.tools.win64_mingw810'
+          cache: true
+
+      - name: Build and package
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          ./harness/build-windows.ps1 -Version $env:APP_VERSION `
+            -ZipPath "dist/qwen-image-harness-$($env:APP_VERSION)-windows-x64.zip"
+
+      - name: Smoke test (--version, offscreen)
+        shell: pwsh
+        env:
+          EXPECTED: ${{ needs.version.outputs.version }}
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $exe = (Resolve-Path 'harness/dist/QwenImageHarness/QwenImageHarness.exe').Path
+          $out = Join-Path $env:RUNNER_TEMP 'version-out.txt'
+          $p = Start-Process $exe -ArgumentList '--version' -Wait -PassThru -NoNewWindow `
+            -RedirectStandardOutput $out
+          $text = (Get-Content $out -Raw).Trim()
+          Write-Host $text
+          if ($p.ExitCode -ne 0) { throw "QwenImageHarness --version exited $($p.ExitCode)" }
+          if ($text -ne "Qwen Image Harness $env:EXPECTED") { throw "version stamp mismatch: $text" }
+
+      - name: Upload Windows zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-${{ needs.version.outputs.version }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+  linux:
+    name: Linux x86_64
+    needs: version
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt 5 and build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential qtbase5-dev qttools5-dev-tools
+
+      - name: Build
+        env:
+          APP_VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          qmake_bin=/usr/lib/x86_64-linux-gnu/qt5/bin/qmake
+          if [ ! -x "$qmake_bin" ]; then
+            qmake_bin=$(command -v qmake)
+          fi
+          echo "Using $qmake_bin"
+          export QMAKE="$qmake_bin"
+          ./harness/build-linux.sh
+
+      - name: Smoke test (--version, offscreen)
+        env:
+          QT_QPA_PLATFORM: offscreen
+          EXPECTED: ${{ needs.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          text=$(harness/Build-Linux/QwenImageHarness --version)
+          echo "$text"
+          test "$text" = "Qwen Image Harness ${EXPECTED}"
+
+      - name: Package tarball
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="qwen-image-harness-${VERSION}-linux-x86_64"
+          stage="dist/${name}"
+          mkdir -p "${stage}/harness/Build-Linux"
+          install -m 755 harness/Build-Linux/QwenImageHarness "${stage}/harness/Build-Linux/QwenImageHarness"
+          install -m 755 harness/install.sh "${stage}/harness/install.sh"
+          cp README.md LICENSE NOTICE AGENT.md "${stage}/"
+          cp -r examples "${stage}/examples"
+          printf '%s\n' "${VERSION}" > "${stage}/version.txt"
+          tar -czf "dist/${name}.tar.gz" -C dist "${name}"
+          tar -tzf "dist/${name}.tar.gz" > /tmp/tar-list.txt
+          head -n 20 /tmp/tar-list.txt
+
+      - name: Upload Linux tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64-${{ needs.version.outputs.version }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [version, windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List release files
+        run: ls -lh dist
+
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum *.zip *.tar.gz > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Qwen Image Harness ${{ needs.version.outputs.version }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.zip
+            dist/*.tar.gz
+            dist/SHA256SUMS.txt

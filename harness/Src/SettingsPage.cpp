@@ -1,5 +1,6 @@
 #include "SettingsPage.h"
 
+#include "AppVersion.h"
 #include "Icons.h"
 #include "Log.h"
 #include "Settings.h"
@@ -496,12 +497,13 @@ QWidget *SettingsPage::buildAboutCard()
 
     QLabel *text = new QLabel(
         QString("<div style='line-height:150%'>"
-                "<b>Qwen Image Harness</b> 0.1.0<br>"
+                "<b>Qwen Image Harness</b> %1<br>"
                 "Frontend shell for Qwen-Image-2.1.<br><br>"
-                "Qt %1  &middot;  %2<br>"
+                "Qt %2  &middot;  %3<br>"
                 "The UI talks to an abstract backend; the bundled build uses a simulator."
                 "</div>")
-            .arg(QString::fromLatin1(qVersion()), QSysInfo::prettyProductName()),
+            .arg(QString::fromLatin1(APP_VERSION), QString::fromLatin1(qVersion()),
+                 QSysInfo::prettyProductName()),
         card);
     text->setObjectName("Dim");
     text->setWordWrap(true);

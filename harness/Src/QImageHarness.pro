@@ -5,6 +5,15 @@ TEMPLATE = app
 
 CONFIG += c++11
 
+# Version: CI exports APP_VERSION (usually a git tag) and this file is the
+# single source of the fallback used by local builds. Bump the fallback when
+# cutting a release by hand.
+APP_VERSION = $$(APP_VERSION)
+isEmpty(APP_VERSION) {
+    APP_VERSION = 0.1.0
+}
+DEFINES += APP_VERSION=\\\"$$APP_VERSION\\\"
+
 # Keep this list explicit: the project builds with qmake on Windows and Linux.
 SOURCES += \
     Main.cpp \
@@ -30,6 +39,7 @@ SOURCES += \
     Widgets.cpp
 
 HEADERS += \
+    AppVersion.h \
     MainWindow.h \
     Backend.h \
     BackendFactory.h \

@@ -155,6 +155,19 @@ sudo apt install -y build-essential qtbase5-dev qttools5-dev-tools   # ask first
 cd harness && ./build-linux.sh && ./install.sh --no-build
 ```
 
+On Windows the frontend builds with the same `.pro` file: install a Qt 5.12+ MinGW
+64-bit kit, then
+
+```powershell
+powershell -ExecutionPolicy Bypass -File harness\build-windows.ps1
+# -> harness\dist\QwenImageHarness\QwenImageHarness.exe  (windeployqt output, standalone)
+```
+
+`harness/build-windows.ps1 -Version 1.2.3 -ZipPath dist\out.zip` produces the release
+archive; `.github/workflows/build.yml` does this for both OSes on every push. The engine
+phases in this document (venv, ComfyUI, weights) are Linux-only — on Windows install
+ComfyUI separately and point Settings → Server at it.
+
 Qt 5.4 API floor, Qt 5.15 in practice (Qt 6 also builds). The binary is ~850 KB; the
 launcher, icon and `.desktop` entry go into `~/.local` — no root.
 

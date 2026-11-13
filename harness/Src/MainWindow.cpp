@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 
+#include "AppVersion.h"
 #include "BackendFactory.h"
 #include "CreatePage.h"
 #include "GalleryPage.h"
@@ -96,7 +97,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_resizing(false)
     , m_resizeEdge(EdgeNone)
 {
-    setWindowTitle("Qwen Image Harness");
+    setWindowTitle(QString("Qwen Image Harness %1").arg(QString::fromLatin1(APP_VERSION)));
     setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
     setMinimumSize(1300, 700);
 

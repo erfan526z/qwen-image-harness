@@ -59,6 +59,12 @@ struct ServerOptions {
     }
 };
 
+//! Platform default ComfyUI checkout: ~/git/ComfyUI on Unix, %USERPROFILE%/ComfyUI on Windows.
+QString defaultComfyDir();
+
+//! Interpreter inside that checkout's venv (bin/python on Unix, Scripts/python.exe on Windows).
+QString defaultComfyPython();
+
 /*!
  * Persistent application configuration. Values are cached in memory, edited
  * through setters, and written by save() so a settings page can offer
